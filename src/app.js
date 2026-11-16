@@ -8,7 +8,7 @@ const swaggerUi = require("swagger-ui-express");
 
 const envConfig = require("./config/envConfig");
 const swaggerSpec = require("./config/swagger");
-
+const path = require("path");
 // Register Sequelize models and associations
 require("./models");
 
@@ -143,7 +143,11 @@ app.use(
     ],
   })
 );
-
+// Serve uploaded media files from public/media
+app.use(
+  "/media",
+  express.static(path.join(process.cwd(), "public", "media"))
+);
 // ==========================================
 // REQUEST BODY PARSERS
 // ==========================================

@@ -1,51 +1,73 @@
-
 const express = require("express");
-
 const router = express.Router();
 
 const MediaController = require("../controllers/MediaController");
 const MediaFormatController = require("../controllers/MediaFormatController");
 
-const upload = require("../middlewares/mediaUpload");
-
-// // Replace this import with your existing admin authentication middleware.
-// const authMiddleware = require("../middlewares/authMiddleware");
-
-// // All media management routes require admin authentication.
-// router.use(authMiddleware);
+// 🟢 Import both middlewares
+const { upload, bulkUpload } = require("../middlewares/mediaUpload");
 
 // ======================================
 // MEDIA CONTENTS
 // ======================================
 
-// Get files and folders by location
-// GET /api/admin/media/contents?location=images
 router.get(
   "/contents",
   MediaController.getContentByLocation
-);
-
-// Get individual media details
-// GET /api/admin/media/:id
-router.get(
-  "/:id",
-  MediaController.getMediaById
 );
 
 // ======================================
 // FILE MANAGEMENT
 // ======================================
 
-// Upload media file
-// POST /api/admin/media/upload
+// Upload media file (Single)
 router.post(
   "/upload",
-  upload.single("file"),
+  upload.single("file"), // Ab yahan 'upload' defined hai
   MediaController.uploadFile
 );
 
+// 🟢 Upload media files (Bulk)
+router.post(
+  "/bulk-upload",
+  bulkUpload.array("files", 100),
+  MediaController.bulkUpload
+);
+
+// 🟢 SSE Progress Endpoint
+router.get(
+  "/upload-progress/:uploadId",
+  (req, res) => {
+    const { uploadId } = req.params;
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    if (!req.app.locals.uploadProgress) {
+      req.app.locals.uploadProgress = {};
+    }
+
+    const sendUpdate = () => {
+      const data = req.app.locals.uploadProgress[uploadId];
+      if (data) {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } else {
+        res.write(`data: ${JSON.stringify({ status: "waiting", message: "Waiting for upload to start..." })}\n\n`);
+      }
+    };
+
+    sendUpdate();
+    const interval = setInterval(sendUpdate, 500);
+
+    req.on("close", () => {
+      clearInterval(interval);
+    });
+  }
+);
+
 // Delete media file
-// DELETE /api/admin/media/files/:id
 router.delete(
   "/files/:id",
   MediaController.deleteFile
@@ -55,15 +77,11 @@ router.delete(
 // FOLDER MANAGEMENT
 // ======================================
 
-// Create folder
-// POST /api/admin/media/folders
 router.post(
   "/folders",
   MediaController.createFolder
 );
 
-// Delete empty folder
-// DELETE /api/admin/media/folders
 router.delete(
   "/folders",
   MediaController.deleteFolder
@@ -73,36 +91,26 @@ router.delete(
 // MEDIA FORMAT MANAGEMENT
 // ======================================
 
-// Get all supported formats
-// GET /api/admin/media/formats
 router.get(
   "/formats",
   MediaFormatController.getFormats
 );
 
-// Add new format
-// POST /api/admin/media/formats
 router.post(
   "/formats",
   MediaFormatController.createFormat
 );
 
-// Update format
-// PUT /api/admin/media/formats/:id
 router.put(
   "/formats/:id",
   MediaFormatController.updateFormat
 );
 
-// Enable / Disable format
-// PATCH /api/admin/media/formats/:id/status
 router.patch(
   "/formats/:id/status",
   MediaFormatController.updateFormatStatus
 );
 
-// Delete format
-// DELETE /api/admin/media/formats/:id
 router.delete(
   "/formats/:id",
   MediaFormatController.deleteFormat

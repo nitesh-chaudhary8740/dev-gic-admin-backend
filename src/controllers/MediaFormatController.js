@@ -28,7 +28,12 @@ class MediaFormatController {
   // POST /api/admin/media/formats
   static async createFormat(req, res) {
     try {
-      let { extension, mimeTypes, category } = req.body;
+      let {
+        extension,
+        mimeTypes,
+        category,
+        allowedSize = 5242880
+      } = req.body;
 
       if (!extension || !category) {
         return res.status(400).json({
@@ -73,6 +78,34 @@ class MediaFormatController {
         });
       }
 
+      // Validate allowed size (bytes)
+      if (
+        !Number.isSafeInteger(Number(allowedSize)) ||
+        Number(allowedSize) <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "allowedSize must be a positive safe integer in bytes."
+        });
+      }
+
+      allowedSize = Number(allowedSize);
+
+      // Normalize and validate MIME types
+      mimeTypes = [...new Set(
+        mimeTypes
+          .filter(type => typeof type === "string")
+          .map(type => type.trim().toLowerCase())
+          .filter(Boolean)
+      )];
+
+      if (mimeTypes.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one valid MIME type is required."
+        });
+      }
+
       const existing = await MediaFormat.findOne({
         where: { extension }
       });
@@ -88,6 +121,7 @@ class MediaFormatController {
         extension,
         mimeTypes,
         category,
+        allowedSize,
         isAllowed: true
       });
 
@@ -110,7 +144,7 @@ class MediaFormatController {
   static async updateFormat(req, res) {
     try {
       const { id } = req.params;
-      const { mimeTypes, category } = req.body;
+      const { mimeTypes, category, allowedSize } = req.body;
 
       const format = await MediaFormat.findByPk(id);
 
@@ -123,11 +157,17 @@ class MediaFormatController {
 
       if (
         mimeTypes !== undefined &&
-        (!Array.isArray(mimeTypes) || mimeTypes.length === 0)
+        (
+          !Array.isArray(mimeTypes) ||
+          mimeTypes.length === 0 ||
+          mimeTypes.some(type =>
+            typeof type !== "string" || !type.trim()
+          )
+        )
       ) {
         return res.status(400).json({
           success: false,
-          message: "MIME types must be a non-empty array."
+          message: "MIME types must be a non-empty array of valid strings."
         });
       }
 
@@ -139,20 +179,48 @@ class MediaFormatController {
         "archive"
       ];
 
-      if (
-        category !== undefined &&
-        !allowedCategories.includes(category.toLowerCase())
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid media category."
-        });
+      if (category !== undefined) {
+        if (
+          typeof category !== "string" ||
+          !allowedCategories.includes(category.toLowerCase())
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid media category."
+          });
+        }
       }
 
-      await format.update({
-        ...(mimeTypes !== undefined && { mimeTypes }),
-        ...(category !== undefined && { category: category.toLowerCase() })
-      });
+      // Validate allowed size only when supplied
+      if (allowedSize !== undefined) {
+        if (
+          !Number.isSafeInteger(Number(allowedSize)) ||
+          Number(allowedSize) <= 0
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "allowedSize must be a positive safe integer in bytes."
+          });
+        }
+      }
+
+      const updatedData = {};
+
+      if (mimeTypes !== undefined) {
+        updatedData.mimeTypes = [...new Set(
+          mimeTypes.map(type => type.trim().toLowerCase())
+        )];
+      }
+
+      if (category !== undefined) {
+        updatedData.category = category.toLowerCase();
+      }
+
+      if (allowedSize !== undefined) {
+        updatedData.allowedSize = Number(allowedSize);
+      }
+
+      await format.update(updatedData);
 
       return res.status(200).json({
         success: true,

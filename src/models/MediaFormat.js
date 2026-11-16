@@ -28,6 +28,13 @@ const MediaFormat = sequelize.define(
       allowNull: false
     },
 
+    allowedSize: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: false,
+      defaultValue: 5242880,
+      comment: "Maximum allowed file size in bytes"
+    },
+
     isAllowed: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

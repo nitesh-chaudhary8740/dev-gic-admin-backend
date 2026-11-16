@@ -1,5 +1,5 @@
-
-const fs = require("fs/promises");
+const fs = require("fs");
+const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 
@@ -64,7 +64,7 @@ class MediaService {
     const { fullPath } = this.resolveLocation(location);
 
     // Check media root first
-    const rootStat = await fs.lstat(MEDIA_ROOT).catch(() => null);
+    const rootStat = await fsp.lstat(MEDIA_ROOT).catch(() => null);
 
     if (
       !rootStat ||
@@ -85,7 +85,7 @@ class MediaService {
       for (const segment of segments) {
         currentPath = path.join(currentPath, segment);
 
-        const stat = await fs.lstat(currentPath).catch(() => null);
+        const stat = await fsp.lstat(currentPath).catch(() => null);
 
         if (
           !stat ||
@@ -148,7 +148,7 @@ class MediaService {
     );
 
     try {
-      await fs.mkdir(folderPath);
+      await fsp.mkdir(folderPath);
     } catch (error) {
       if (error.code === "EEXIST") {
         throw new Error("FOLDER_ALREADY_EXISTS");
@@ -171,7 +171,7 @@ class MediaService {
   }
 
   // -----------------------------------------
-  // 2. UPLOAD FILE
+  // 2. UPLOAD FILE (Single)
   // -----------------------------------------
 
   static async uploadFile({
@@ -299,7 +299,7 @@ class MediaService {
       targetPath = path.join(directory, finalName);
 
       const getExisting = async (target) => {
-        const stat = await fs.lstat(target).catch(error => {
+        const stat = await fsp.lstat(target).catch(error => {
           if (error.code === "ENOENT") return null;
           throw error;
         });
@@ -362,24 +362,24 @@ class MediaService {
           `.backup-${crypto.randomUUID()}`
         );
 
-        await fs.rename(targetPath, backupPath);
+        await fsp.rename(targetPath, backupPath);
 
         try {
-          await fs.rename(file.path, targetPath);
+          await fsp.rename(file.path, targetPath);
 
           uploadedFileMoved = true;
 
-          await fs.unlink(backupPath);
+          await fsp.unlink(backupPath);
 
         } catch (error) {
 
           // Remove new file if it was moved
           if (uploadedFileMoved) {
-            await fs.unlink(targetPath).catch(() => {});
+            await fsp.unlink(targetPath).catch(() => {});
           }
 
           // Restore old file
-          await fs.rename(backupPath, targetPath).catch(() => {});
+          await fsp.rename(backupPath, targetPath).catch(() => {});
 
           throw error;
         }
@@ -390,7 +390,7 @@ class MediaService {
         // NEW FILE UPLOAD
         // -----------------------------------------
 
-        await fs.rename(file.path, targetPath);
+        await fsp.rename(file.path, targetPath);
 
         uploadedFileMoved = true;
       }
@@ -399,7 +399,7 @@ class MediaService {
       // RESPONSE
       // -----------------------------------------
 
-      const stat = await fs.stat(targetPath);
+      const stat = await fsp.stat(targetPath);
 
       return {
         id: `file:${relativePath}`,
@@ -420,13 +420,163 @@ class MediaService {
 
       // Remove temporary upload if not moved
       if (!uploadedFileMoved && file.path) {
-        await fs.unlink(file.path).catch(() => {});
+        await fsp.unlink(file.path).catch(() => {});
       }
     }
   }
 
   // -----------------------------------------
-  // 3. DELETE FILE
+  // 🟢 3. BULK UPLOAD FILES (NEW)
+  // No DB. Chunked stream copy with SSE progress.
+  // -----------------------------------------
+
+  static async bulkUploadFiles({
+    files,
+    location = "",
+    conflictAction = "cancel",
+    uploadId,
+    app
+  }) {
+    const results = { success: [], skipped: [], failed: [] };
+
+    // Resolve destination directory
+    const { fullPath: destinationDir } = this.resolveLocation(location);
+
+    // Ensure directory exists (but not via ensureDirectory — that requires parent exist)
+    await fsp.mkdir(destinationDir, { recursive: true });
+
+    const totalFiles = files.length;
+
+    const updateProgress = (data) => {
+      if (uploadId && app && app.locals.uploadProgress && app.locals.uploadProgress[uploadId]) {
+        Object.assign(app.locals.uploadProgress[uploadId], data);
+      }
+    };
+
+    for (let i = 0; i < totalFiles; i++) {
+      const file = files[i];
+      const originalName = file.originalname;
+      const fileSize = Number(file.size) || 0;
+
+      updateProgress({
+        processedFiles: i,
+        currentFile: originalName,
+        currentFileProgress: 0,
+        message: `Processing ${originalName}...`
+      });
+
+      const extension = path.extname(originalName).slice(1).toLowerCase();
+
+      // Reject dangerous extensions
+      if (!extension || isDangerousExtension(extension)) {
+        await fsp.unlink(file.path).catch(() => {});
+        results.failed.push({ name: originalName, reason: "INVALID_FILE_EXTENSION" });
+        continue;
+      }
+
+      // Resolve final name
+      let finalName = originalName;
+      let targetPath = path.join(destinationDir, finalName);
+
+      try {
+        const exists = await fsp.access(targetPath).then(() => true).catch(() => false);
+
+        if (exists) {
+          if (conflictAction === "cancel") {
+            await fsp.unlink(file.path).catch(() => {});
+            results.skipped.push({ name: originalName, reason: "NAME_CONFLICT" });
+            continue;
+          }
+
+          if (conflictAction === "rename") {
+            const parsed = path.parse(originalName);
+            let counter = 1;
+            do {
+              finalName = `${parsed.name}(${counter})${parsed.ext}`;
+              targetPath = path.join(destinationDir, finalName);
+              counter++;
+            } while (await fsp.access(targetPath).then(() => true).catch(() => false));
+          }
+
+          if (conflictAction === "replace") {
+            // If exists, remove first (we stream below)
+            await fsp.unlink(targetPath).catch(() => {});
+          }
+        }
+
+        // -----------------------------------------
+        // 🟢 Chunked stream copy with progress
+        // -----------------------------------------
+        await new Promise((resolve, reject) => {
+          const readStream = fs.createReadStream(file.path, {
+            highWaterMark: 64 * 1024 // 64 KB chunks
+          });
+          const writeStream = fs.createWriteStream(targetPath);
+
+          let bytesWritten = 0;
+          let lastReportedPercent = -1;
+
+          readStream.on("data", (chunk) => {
+            bytesWritten += chunk.length;
+
+            if (fileSize > 0) {
+              const percent = Math.floor((bytesWritten / fileSize) * 100);
+
+              // Throttle: only update on percent change
+              if (percent !== lastReportedPercent) {
+                lastReportedPercent = percent;
+                updateProgress({
+                  currentFileProgress: percent,
+                  message: `Uploading ${originalName} (${percent}%)`
+                });
+              }
+            }
+          });
+
+          readStream.on("error", (err) => {
+            writeStream.destroy();
+            reject(err);
+          });
+
+          writeStream.on("error", (err) => {
+            readStream.destroy();
+            reject(err);
+          });
+
+          writeStream.on("finish", async () => {
+            await fsp.unlink(file.path).catch(() => {});
+            resolve();
+          });
+
+          readStream.pipe(writeStream);
+        });
+
+        results.success.push({
+          originalName,
+          savedName: finalName
+        });
+
+        updateProgress({
+          processedFiles: i + 1,
+          currentFileProgress: 100
+        });
+
+      } catch (err) {
+        await fsp.unlink(file.path).catch(() => {});
+        results.failed.push({ name: originalName, reason: err.message });
+        updateProgress({
+          processedFiles: i + 1,
+          currentFileProgress: 100,
+          message: `Failed: ${originalName}`
+        });
+      }
+    }
+
+    return results;
+  }
+
+  // -----------------------------------------
+  // 4. DELETE FILE
   // -----------------------------------------
 
   static async deleteFile(location) {
@@ -437,14 +587,13 @@ class MediaService {
     const { fullPath, relativePath } =
       this.resolveLocation(location);
 
-    // Validate parent directory to prevent symlink traversal
     const parentPath = path.posix.dirname(relativePath);
 
     await this.ensureDirectory(
       parentPath === "." ? "" : parentPath
     );
 
-    const stat = await fs.lstat(fullPath).catch(error => {
+    const stat = await fsp.lstat(fullPath).catch(error => {
       if (error.code === "ENOENT") return null;
       throw error;
     });
@@ -453,14 +602,11 @@ class MediaService {
       throw new Error("MEDIA_NOT_FOUND");
     }
 
-    if (
-      stat.isSymbolicLink() ||
-      !stat.isFile()
-    ) {
+    if (stat.isSymbolicLink() || !stat.isFile()) {
       throw new Error("INVALID_MEDIA_FILE");
     }
 
-    await fs.unlink(fullPath);
+    await fsp.unlink(fullPath);
 
     return {
       path: relativePath,
@@ -469,7 +615,7 @@ class MediaService {
   }
 
   // -----------------------------------------
-  // 4. DELETE EMPTY FOLDER
+  // 5. DELETE EMPTY FOLDER
   // -----------------------------------------
 
   static async deleteFolder(location) {
@@ -486,26 +632,22 @@ class MediaService {
       parentPath === "." ? "" : parentPath
     );
 
-    const stat = await fs.lstat(fullPath).catch(error => {
+    const stat = await fsp.lstat(fullPath).catch(error => {
       if (error.code === "ENOENT") return null;
       throw error;
     });
 
-    if (
-      !stat ||
-      !stat.isDirectory() ||
-      stat.isSymbolicLink()
-    ) {
+    if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) {
       throw new Error("FOLDER_NOT_FOUND");
     }
 
-    const contents = await fs.readdir(fullPath);
+    const contents = await fsp.readdir(fullPath);
 
     if (contents.length > 0) {
       throw new Error("FOLDER_NOT_EMPTY");
     }
 
-    await fs.rmdir(fullPath);
+    await fsp.rmdir(fullPath);
 
     return {
       path: relativePath,
@@ -514,7 +656,7 @@ class MediaService {
   }
 
   // -----------------------------------------
-  // 5. GET CONTENT BY LOCATION
+  // 6. GET CONTENT BY LOCATION
   // -----------------------------------------
 
   static async getContentByLocation(location = "") {
@@ -525,35 +667,22 @@ class MediaService {
     const directory =
       await this.ensureDirectory(normalizedLocation);
 
-    const entries = await fs.readdir(directory);
+    const entries = await fsp.readdir(directory);
 
     const contents = [];
 
     for (const entryName of entries) {
+      const fullPath = path.join(directory, entryName);
+      const stat = await fsp.lstat(fullPath);
 
-      const fullPath = path.join(
-        directory,
-        entryName
-      );
-
-      const stat = await fs.lstat(fullPath);
-
-      // Ignore symbolic links
-      if (stat.isSymbolicLink()) {
-        continue;
-      }
+      if (stat.isSymbolicLink()) continue;
 
       const relativePath = path.posix.join(
         normalizedLocation,
         entryName
       );
 
-      // -----------------------------------------
-      // FOLDER
-      // -----------------------------------------
-
       if (stat.isDirectory()) {
-
         contents.push({
           id: `folder:${relativePath}`,
           type: "folder",
@@ -563,15 +692,7 @@ class MediaService {
           createdAt: stat.birthtime,
           updatedAt: stat.mtime
         });
-
-      }
-
-      // -----------------------------------------
-      // FILE
-      // -----------------------------------------
-
-      else if (stat.isFile()) {
-
+      } else if (stat.isFile()) {
         contents.push({
           id: `file:${relativePath}`,
           type: "file",
@@ -580,24 +701,17 @@ class MediaService {
           path: relativePath,
           url: `/media/${relativePath}`,
           size: stat.size,
-          format: path.extname(entryName)
-            .slice(1)
-            .toLowerCase(),
+          format: path.extname(entryName).slice(1).toLowerCase(),
           createdAt: stat.birthtime,
           updatedAt: stat.mtime
         });
       }
     }
 
-    // -----------------------------------------
-    // SORT FOLDERS FIRST, THEN FILES
-    // -----------------------------------------
-
     contents.sort((a, b) => {
       if (a.type !== b.type) {
         return a.type === "folder" ? -1 : 1;
       }
-
       return a.name.localeCompare(b.name);
     });
 
@@ -609,13 +723,12 @@ class MediaService {
   }
 
   // -----------------------------------------
-  // 6. GET ALLOWED FORMATS
+  // 7. GET ALLOWED FORMATS
   // -----------------------------------------
 
   static async getFormats() {
     return this.getAllowedFormats();
   }
-
 }
 
 module.exports = MediaService;
