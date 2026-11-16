@@ -16,6 +16,7 @@ require("./models");
 const languageRoutes = require("./routes/languageRoutes");
 const menuRoutes = require("./routes/menuRoutes");
 const pageRoutes = require("./routes/pageRoutes");
+const mediaRoutes = require("./routes/mediaRoutes");
 
 // Error handlers
 const { notFound, errorHandler } = require("./middlewares/error");
@@ -23,6 +24,9 @@ const { notFound, errorHandler } = require("./middlewares/error");
 const app = express();
 
 const isProd = envConfig.NODE_ENV === "production";
+
+
+
 
 // ==========================================
 // TRUST PROXY
@@ -193,7 +197,7 @@ app.use(
 app.use("/api/languages", languageRoutes);
 app.use("/api/menus", menuRoutes);
 app.use("/api/pages", pageRoutes);
-
+app.use("/api/admin/media", mediaRoutes);
 // ==========================================
 // 404 HANDLER
 // ==========================================

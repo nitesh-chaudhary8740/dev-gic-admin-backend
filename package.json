@@ -25,7 +25,7 @@
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
     "morgan": "^1.12.1",
-    "multer": "^2.4.0",
+    "multer": "^2.5.0",
     "mysql2": "^3.24.6",
     "sanitize-html": "^2.18.1",
     "sequelize": "^6.37.8",

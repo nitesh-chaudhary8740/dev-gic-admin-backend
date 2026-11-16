@@ -5,6 +5,7 @@ const MenuTranslation = require("./MenuTranslation");
 const Page = require("./Page");
 const Language = require("./Language");
 const Media = require("./Media");
+const MediaFormat = require("./MediaFormat");
 
 // Menu self association
 Menu.belongsTo(Menu, {
@@ -56,5 +57,6 @@ module.exports = {
   MenuTranslation,
   Page,
   Language,
-  Media
+  Media,
+  MediaFormat
 };
