@@ -1,0 +1,4 @@
+.admin-sidebar { width: 230px; min-height: 100vh; flex-shrink: 0; }
+.admin-main { min-width: 0; }
+.login-card { max-width: 400px; }
+#editor { min-height: 320px; background: #fff; }

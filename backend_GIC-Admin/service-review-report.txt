@@ -1,0 +1,342 @@
+﻿SERVICE LAYER REVIEW
+====================
+Project: C:\Users\netbeans\Desktop\Nitesh\gic-admin-express\gic-admin
+Services: C:\Users\netbeans\Desktop\Nitesh\gic-admin-express\gic-admin\src\services
+Generated: 2026-10-19 16:17:45
+
+NOTE: Read-only audit. No source files or database were modified.
+
+
+FILE: languageService.js
+------------------------
+Path: src\services\languageService.js
+
+[Publish-status filtering]
+  Line 6: isPublished:
+  Line 7: data.isPublished !== undefined ? data.isPublished : true,
+  Line 20: isPublished: true,
+  Line 39: isPublished:
+  Line 40: data.isPublished !== undefined
+  Line 41: ? data.isPublished
+  Line 42: : language.isPublished,
+  Line 56: isPublished: true,
+  Line 70: isPublished: false,
+
+[Association/include usage]
+  Line 1: const { Language } = require("../models");
+  Line 4: return await Language.create({
+  Line 12: return await Language.findAll({
+  Line 18: return await Language.findAll({
+  Line 27: return await Language.findByPk(id);
+  Line 31: const language = await Language.findByPk(id);
+  Line 33: if (!language) {
+  Line 34: throw new Error("Language not found");
+  Line 37: await language.update({
+  Line 38: name: data.name ?? language.name,
+  Line 42: : language.isPublished,
+  Line 45: return language;
+  Line 49: const language = await Language.findByPk(id);
+  Line 51: if (!language) {
+  Line 52: throw new Error("Language not found");
+  Line 55: await language.update({
+  Line 59: return language;
+  Line 63: const language = await Language.findByPk(id);
+  Line 65: if (!language) {
+  Line 66: throw new Error("Language not found");
+  Line 69: await language.update({
+  Line 73: return language;
+
+[Method names found]
+  No matching named function declarations found.
+
+FILE: menuService.js
+--------------------
+Path: src\services\menuService.js
+
+[Soft-delete filtering]
+  Line 10: isDeleted: false,
+  Line 17: isDeleted: false,
+  Line 34: isDeleted: false,
+  Line 46: isDeleted: false,
+  Line 65: isDeleted: false,
+  Line 92: isDeleted: false,
+  Line 111: isDeleted: false,
+  Line 130: isDeleted: false,
+  Line 149: isDeleted: false,
+  Line 158: isDeleted: true,
+  Line 173: isDeleted: false,
+  Line 182: isDeleted: false,
+  Line 198: "isDeleted",
+
+[Publish-status filtering]
+  Line 8: isPublished:
+  Line 9: data.isPublished !== undefined ? data.isPublished : true,
+  Line 54: "isPublished",
+  Line 79: isPublished:
+  Line 80: data.isPublished !== undefined
+  Line 81: ? data.isPublished
+  Line 82: : menu.isPublished,
+  Line 101: isPublished: true,
+  Line 120: isPublished: false,
+  Line 139: isPublished: !menu.isPublished,
+  Line 159: isPublished: false,
+  Line 187: where.isPublished = true;
+  Line 197: "isPublished",
+  Line 210: isPublished: Boolean(menu.isPublished),
+
+[Association/include usage]
+  Line 1: const { Menu, Page, Language } = require("../models");
+  Line 4: return await Menu.create({
+  Line 15: return await Menu.findAll({
+  Line 19: include: [
+  Line 21: model: Menu,
+  Line 31: return await Menu.findOne({
+  Line 36: include: [
+  Line 38: model: Menu,
+  Line 43: model: Menu,
+  Line 62: const menu = await Menu.findOne({
+  Line 69: if (!menu) {
+  Line 70: throw new Error("Menu not found");
+  Line 73: await menu.update({
+  Line 74: menuTitle: data.menuTitle ?? menu.menuTitle,
+  Line 76: data.menuURL !== undefined ? data.menuURL : menu.menuURL,
+  Line 78: data.parentId !== undefined ? data.parentId : menu.parentId,
+  Line 82: : menu.isPublished,
+  Line 85: return menu;
+  Line 89: const menu = await Menu.findOne({
+  Line 96: if (!menu) {
+  Line 97: throw new Error("Menu not found");
+  Line 100: await menu.update({
+  Line 104: return menu;
+  Line 108: const menu = await Menu.findOne({
+  Line 115: if (!menu) {
+  Line 116: throw new Error("Menu not found");
+  Line 119: await menu.update({
+  Line 123: return menu;
+  Line 127: const menu = await Menu.findOne({
+  Line 134: if (!menu) {
+  Line 135: throw new Error("Menu not found");
+  Line 138: await menu.update({
+  Line 139: isPublished: !menu.isPublished,
+  Line 142: return menu;
+  Line 146: const menu = await Menu.findOne({
+  Line 153: if (!menu) {
+  Line 154: throw new Error("Menu not found");
+  Line 157: await menu.update({
+  Line 162: return menu;
+  Line 166: const menu = await Menu.findByPk(id);
+  Line 168: if (!menu) {
+  Line 169: throw new Error("Menu not found");
+  Line 172: await menu.update({
+  Line 176: return menu;
+  Line 190: const menus = await Menu.findAll({
+  Line 207: for (const menu of menus) {
+  Line 208: menuMap.set(menu.id, {
+  Line 209: ...menu,
+  Line 210: isPublished: Boolean(menu.isPublished),
+  Line 217: for (const menu of menuMap.values()) {
+  Line 218: if (menu.parentId !== null && menuMap.has(menu.parentId)) {
+  Line 219: menuMap.get(menu.parentId).children.push(menu);
+  Line 221: tree.push(menu);
+
+[Method names found]
+  No matching named function declarations found.
+
+FILE: menuTranslationService.js
+-------------------------------
+Path: src\services\menuTranslationService.js
+
+[Legacy page/menu relation reference]
+  Line 38: menuId: data.menuId,
+  Line 39: languageId: data.languageId,
+
+[New page translation relation]
+  Line 173: menuTranslationId: id,
+  Line 238: menuTranslationId: translation.id,
+
+[Soft-delete filtering]
+  Line 13: isDeleted: false,
+  Line 114: isDeleted: false,
+  Line 211: isDeleted: false,
+
+[Publish-status filtering]
+  Line 26: isPublished: true,
+  Line 129: isPublished: true,
+  Line 198: isPublished: true,
+  Line 212: isPublished: true,
+
+[Association/include usage]
+  Line 3: Menu,
+  Line 4: MenuTranslation,
+  Line 5: Language,
+  Line 6: Page,
+  Line 10: const menu = await Menu.findOne({
+  Line 17: if (!menu) {
+  Line 18: throw Object.assign(new Error("Menu not found."), {
+  Line 23: const language = await Language.findOne({
+  Line 30: if (!language) {
+  Line 32: new Error("Published language not found."),
+  Line 37: return MenuTranslation.create({
+  Line 56: return MenuTranslation.findAll({
+  Line 58: include: [
+  Line 60: model: Menu,
+  Line 61: as: "menu",
+  Line 64: model: Language,
+  Line 65: as: "language",
+  Line 73: const translation = await MenuTranslation.findByPk(id, {
+  Line 74: include: [
+  Line 76: model: Menu,
+  Line 77: as: "menu",
+  Line 80: model: Language,
+  Line 81: as: "language",
+  Line 84: model: Page,
+  Line 85: as: "page",
+  Line 92: new Error("Menu translation not found."),
+  Line 101: const translation = await MenuTranslation.findByPk(id);
+  Line 105: new Error("Menu translation not found."),
+  Line 111: const menu = await Menu.findOne({
+  Line 118: if (!menu) {
+  Line 119: throw Object.assign(new Error("Menu not found."), {
+  Line 126: const language = await Language.findOne({
+  Line 133: if (!language) {
+  Line 135: new Error("Published language not found."),
+  Line 162: const translation = await MenuTranslation.findByPk(id);
+  Line 166: new Error("Menu translation not found."),
+  Line 171: const linkedPage = await Page.findOne({
+  Line 180: "Cannot delete this translation while its page exists."
+  Line 195: const language = await Language.findOne({
+  Line 202: if (!language) {
+  Line 204: new Error("Published language not found."),
+  Line 209: const menus = await Menu.findAll({
+  Line 214: include: [
+  Line 216: model: MenuTranslation,
+  Line 230: const menu = record.toJSON();
+  Line 231: const translation = menu.translations?.[0];
+  Line 235: nodes.set(menu.id, {
+  Line 236: id: menu.id,
+  Line 237: parentId: menu.parentId,
+
+[Method names found]
+  createTranslation
+  getAllTranslations
+  getTranslationById
+  updateTranslation
+  deleteTranslation
+  getMenuHierarchy
+
+FILE: pageService.js
+--------------------
+Path: src\services\pageService.js
+
+[Legacy page/menu relation reference]
+  Line 5: menuId: data.menuId,
+  Line 6: languageId: data.languageId,
+  Line 69: menuId: data.menuId ?? page.menuId,
+  Line 70: languageId: data.languageId ?? page.languageId,
+
+[Soft-delete filtering]
+  Line 10: isDeleted: false,
+  Line 17: isDeleted: false,
+  Line 39: isDeleted: false,
+  Line 60: isDeleted: false,
+  Line 85: isDeleted: false,
+  Line 108: isDeleted: false,
+  Line 127: isDeleted: false,
+  Line 146: isDeleted: false,
+  Line 165: isDeleted: false,
+  Line 174: isDeleted: true,
+  Line 189: isDeleted: false,
+
+[Publish-status filtering]
+  Line 8: isPublished:
+  Line 9: data.isPublished !== undefined ? data.isPublished : false,
+  Line 72: isPublished:
+  Line 73: data.isPublished !== undefined
+  Line 74: ? data.isPublished
+  Line 75: : page.isPublished,
+  Line 117: isPublished: true,
+  Line 136: isPublished: false,
+  Line 155: isPublished: !page.isPublished,
+  Line 175: isPublished: false,
+
+[Page content handling]
+  Line 7: content: data.content,
+  Line 71: content: data.content ?? page.content,
+  Line 81: const addContent = async (id, content) => {
+  Line 94: content,
+  Line 100: const updateContent = async (id, content) => {
+  Line 101: return await addContent(id, content);
+
+[Association/include usage]
+  Line 1: const { Page, Menu, Language } = require("../models");
+  Line 4: return await Page.create({
+  Line 15: return await Page.findAll({
+  Line 19: include: [
+  Line 21: model: Menu,
+  Line 22: as: "menu",
+  Line 26: model: Language,
+  Line 27: as: "language",
+  Line 36: return await Page.findOne({
+  Line 41: include: [
+  Line 43: model: Menu,
+  Line 44: as: "menu",
+  Line 48: model: Language,
+  Line 49: as: "language",
+  Line 57: const page = await Page.findOne({
+  Line 64: if (!page) {
+  Line 65: throw new Error("Page not found");
+  Line 68: await page.update({
+  Line 69: menuId: data.menuId ?? page.menuId,
+  Line 70: languageId: data.languageId ?? page.languageId,
+  Line 71: content: data.content ?? page.content,
+  Line 75: : page.isPublished,
+  Line 78: return page;
+  Line 82: const page = await Page.findOne({
+  Line 89: if (!page) {
+  Line 90: throw new Error("Page not found");
+  Line 93: await page.update({
+  Line 97: return page;
+  Line 105: const page = await Page.findOne({
+  Line 112: if (!page) {
+  Line 113: throw new Error("Page not found");
+  Line 116: await page.update({
+  Line 120: return page;
+  Line 124: const page = await Page.findOne({
+  Line 131: if (!page) {
+  Line 132: throw new Error("Page not found");
+  Line 135: await page.update({
+  Line 139: return page;
+  Line 143: const page = await Page.findOne({
+  Line 150: if (!page) {
+  Line 151: throw new Error("Page not found");
+  Line 154: await page.update({
+  Line 155: isPublished: !page.isPublished,
+  Line 158: return page;
+  Line 162: const page = await Page.findOne({
+  Line 169: if (!page) {
+  Line 170: throw new Error("Page not found");
+  Line 173: await page.update({
+  Line 178: return page;
+  Line 182: const page = await Page.findByPk(id);
+  Line 184: if (!page) {
+  Line 185: throw new Error("Page not found");
+  Line 188: await page.update({
+  Line 192: return page;
+
+[Method names found]
+  No matching named function declarations found.
+
+====================
+EXPECTED ARCHITECTURE CHECKLIST
+====================
+1. Menu service: create and manage shared logical menus.
+2. Menu translation service: localized title, URL and language.
+3. Page service: use menuTranslationId, not direct menuId/languageId.
+4. Page creation: validate translation and prevent duplicate pages.
+5. Multi-step writes: use a transaction where operations must succeed together.
+6. Public queries: filter deleted/unpublished menu, translation, language and page records.
+7. Delete operations: protect translations with linked pages; define soft-delete policy.
+8. Validate request fields and handle unique/FK database errors.
+
+IMPORTANT: This is a pattern-based review, not a full semantic correctness test.
+

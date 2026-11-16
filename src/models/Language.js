@@ -1,4 +1,3 @@
-
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
@@ -45,10 +44,31 @@ const Language = sequelize.define(
       },
     },
 
+    displayName: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+      defaultValue: "",
+      validate: {
+        notEmpty: {
+          msg: "Display name is required.",
+        },
+        len: {
+          args: [1, 100],
+          msg: "Display name must be between 1 and 100 characters.",
+        },
+      },
+    },
+
     isPublished: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+
+    isDefault: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
   },
   {

@@ -416,32 +416,11 @@ const restorePage = async (req, res) => {
 // PUBLIC: GET PAGE CONTENT USING ENCRYPTED TRANSLATION ID
 // --------------------------------------------------
 // --------------------------------------------------
-const getPageContentByUrl = async (req, res) => {
-  try {
-    const { encryptedLanguageId } = req.params;
-    const { url } = req.query;
+// --------------------------------------------------
+// GET PAGE CONTENT (encrypted menuId + languageId)
+// GET /api/pages/content/:encryptedMenuId/:encryptedLanguageId
+// --------------------------------------------------
 
-    if (!url) {
-      return res.status(400).json({
-        success: false,
-        message: "URL query parameter is required.",
-      });
-    }
-
-    const data = await pageService.getPageContentByUrl(
-      encryptedLanguageId,
-      url
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Page content fetched successfully.",
-      data,
-    });
-  } catch (error) {
-    return handleError(res, error);
-  }
-};
 const getPageContent = async (req, res) => {
   try {
     const { encryptedMenuId, encryptedLanguageId } = req.params;
@@ -453,7 +432,47 @@ const getPageContent = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Page content fetched successfully.",
+      data,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// --------------------------------------------------
+// GET PAGE CONTENT BY URL
+// GET /api/pages/content-by-url/:encryptedLanguageId?url=/en/about-us
+// --------------------------------------------------
+
+const getPageContentByUrl = async (req, res) => {
+  try {
+    const { encryptedLanguageId } = req.params;
+    const { url } = req.query;
+
+    const data = await pageService.getPageContentByUrl(
+      encryptedLanguageId,
+      url
+    );
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+const getPageContentByTranslation = async (req, res) => {
+  try {
+    const { encryptedTranslationId, encryptedLanguageId } = req.params;
+
+    const data = await pageService.getPageContentByTranslation(
+      encryptedTranslationId,
+      encryptedLanguageId
+    );
+
+    return res.status(200).json({
+      success: true,
       data,
     });
   } catch (error) {
@@ -472,5 +491,7 @@ module.exports = {
   togglePublish,
   deletePage,
   restorePage,
-  getPageContent,getPageContentByUrl
+  getPageContent,
+  getPageContentByUrl
+  ,getPageContentByTranslation
 };

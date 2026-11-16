@@ -1,0 +1,535 @@
+﻿================================================================================
+FILE: src\models\index.js
+================================================================================
+const sequelize = require("../config/database");
+
+const Menu = require("./Menu");
+const MenuTranslation = require("./MenuTranslation");
+const Page = require("./Page");
+const Language = require("./Language");
+
+// A menu can have a parent and multiple child menus.
+Menu.belongsTo(Menu, {
+  as: "parent",
+  foreignKey: "parentId"
+});
+Menu.hasMany(Menu, {
+  as: "children",
+  foreignKey: "parentId"
+});
+
+// Each logical menu has one translation per language.
+Menu.hasMany(MenuTranslation, {
+  as: "translations",
+  foreignKey: "menuId"
+});
+MenuTranslation.belongsTo(Menu, {
+  as: "menu",
+  foreignKey: "menuId"
+});
+
+Language.hasMany(MenuTranslation, {
+  as: "translations",
+  foreignKey: "languageId"
+});
+MenuTranslation.belongsTo(Language, {
+  as: "language",
+  foreignKey: "languageId"
+});
+
+// Each translated menu can have one page.
+MenuTranslation.hasOne(Page, {
+  as: "page",
+  foreignKey: "menuTranslationId"
+});
+Page.belongsTo(MenuTranslation, {
+  as: "menuTranslation",
+  foreignKey: "menuTranslationId"
+});
+
+module.exports = {
+  sequelize,
+  Menu,
+  MenuTranslation,
+  Page,
+  Language
+};
+
+
+================================================================================
+FILE: src\models\Language.js
+================================================================================
+
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
+
+const Language = sequelize.define(
+  "Language",
+  {
+    id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+
+    name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+      unique: true,
+      validate: {
+        notEmpty: {
+          msg: "Language name is required.",
+        },
+        len: {
+          args: [1, 100],
+          msg: "Language name must be between 1 and 100 characters.",
+        },
+      },
+    },
+
+    code: {
+      type: DataTypes.STRING(6),
+      allowNull: false,
+      unique: true,
+      validate: {
+        notEmpty: {
+          msg: "Language code is required.",
+        },
+        len: {
+          args: [2, 6],
+          msg: "Language code must be between 2 and 6 characters.",
+        },
+        is: {
+          args: /^[a-z]{2,3}(-[a-zA-Z0-9]{2,3})?$/,
+          msg: "Use a valid lowercase language code, optionally with a short region suffix.",
+        },
+      },
+    },
+
+    isPublished: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+  },
+  {
+    tableName: "languages",
+    timestamps: true,
+  }
+);
+
+module.exports = Language;
+
+
+================================================================================
+FILE: src\models\Menu.js
+================================================================================
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
+
+const Menu = sequelize.define("Menu", {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  parentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: { model: "menus", key: "id" }
+  },
+  isPublished: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  isDeleted: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  }
+}, {
+  tableName: "menus",
+  timestamps: true
+});
+
+module.exports = Menu;
+
+
+================================================================================
+FILE: src\models\MenuTranslation.js
+================================================================================
+
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
+
+const MenuTranslation = sequelize.define(
+  "MenuTranslation",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+
+    menuId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "menus",
+        key: "id",
+      },
+    },
+
+    languageId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: "languages",
+        key: "id",
+      },
+    },
+
+    menuTitle: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      validate: {
+        notEmpty: {
+          msg: "Menu title is required.",
+        },
+        len: {
+          args: [1, 255],
+          msg: "Menu title must be between 1 and 255 characters.",
+        },
+      },
+    },
+
+    menuURL: {
+      type: DataTypes.STRING(500),
+      allowNull: false,
+      validate: {
+        notEmpty: {
+          msg: "Menu URL is required.",
+        },
+        len: {
+          args: [1, 500],
+          msg: "Menu URL must be between 1 and 500 characters.",
+        },
+      },
+    },
+
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+  },
+  {
+    tableName: "menu_translations",
+    timestamps: true,
+
+    indexes: [
+      {
+        name: "uq_menu_translation_menu_language",
+        unique: true,
+        fields: ["menuId", "languageId"],
+      },
+    ],
+  }
+);
+
+module.exports = MenuTranslation;
+
+
+================================================================================
+FILE: src\models\Page.js
+================================================================================
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
+
+const Page = sequelize.define("Page", {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  menuTranslationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    unique: true,
+    references: { model: "menu_translations", key: "id" }
+  },
+  content: {
+    type: DataTypes.TEXT("long"),
+    allowNull: true
+  },
+  isPublished: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  isDeleted: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  }
+}, {
+  tableName: "pages",
+  timestamps: true
+});
+
+module.exports = Page;
+
+
+================================================================================
+FILE: src\config\database.js
+================================================================================
+
+const { Sequelize } = require("sequelize");
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT || 3306),
+    dialect: "mysql",
+
+    logging:
+      process.env.NODE_ENV === "development"
+        ? console.log
+        : false,
+
+    pool: {
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
+    },
+  }
+);
+
+module.exports = sequelize;
+
+
+================================================================================
+FILE: src\app.js
+================================================================================
+
+const express = require("express");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const compression = require("compression");
+const cors = require("cors");
+const swaggerUi = require("swagger-ui-express");
+
+const swaggerSpec = require("./config/swagger");
+
+// Register Sequelize models and associations
+require("./models");
+
+// API routes
+const languageRoutes = require("./routes/languageRoutes");
+const menuRoutes = require("./routes/menuRoutes");
+const pageRoutes = require("./routes/pageRoutes");
+
+// Error handlers
+const { notFound, errorHandler } = require("./middlewares/error");
+
+const app = express();
+
+const isProd = process.env.NODE_ENV === "production";
+
+// Trust reverse proxy only when explicitly configured
+if (process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", 1);
+}
+
+// Security headers
+const helmetOptions = {
+  crossOriginEmbedderPolicy: false,
+  hsts: isProd
+    ? {
+        maxAge: 31536000,
+        includeSubDomains: true,
+      }
+    : false,
+};
+
+// Use Helmet's default CSP in production.
+// In development, disable insecure-request upgrades for HTTP/LAN testing.
+if (!isProd) {
+  helmetOptions.contentSecurityPolicy = {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "upgrade-insecure-requests": null,
+    },
+  };
+}
+
+app.use(helmet(helmetOptions));
+
+// Compression
+app.use(compression());
+
+// Request logging
+app.use(morgan(isProd ? "combined" : "dev"));
+
+// CORS configuration
+const developmentOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174`",
+  "http://192.168.1.194:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://192.168.1.194:3000",
+  "http://localhost:3001",
+  "http://192.168.1.194:3001",
+];
+
+const productionOrigins = (process.env.CLIENT_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow requests without Origin, e.g. curl and server-to-server calls.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (
+        !isProd &&
+        developmentOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      if (
+        isProd &&
+        productionOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Request body parsers
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Health check
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: `${process.env.SITE_NAME || "GIC CMS"} API is running`,
+  });
+});
+
+// Swagger API documentation
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    explorer: true,
+    swaggerOptions: {
+      validatorUrl: null,
+    },
+    customSiteTitle: "GIC Admin CMS API",
+  })
+);
+
+// CMS API routes
+app.use("/api/languages", languageRoutes);
+app.use("/api/menus", menuRoutes);
+app.use("/api/pages", pageRoutes);
+
+// 404 handler
+app.use(notFound);
+
+// Central error handler
+app.use(errorHandler);
+
+module.exports = app;
+
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "gic-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express + MySQL CMS with admin panel",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
+    "connect-flash": "^0.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "ejs": "^7.0.1",
+    "express": "^4.22.3",
+    "express-ejs-layouts": "^2.5.1",
+    "express-mysql-session": "^3.0.3",
+    "express-rate-limit": "^8.7.1",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "morgan": "^1.12.1",
+    "multer": "^2.4.0",
+    "mysql2": "^3.24.6",
+    "sanitize-html": "^2.18.1",
+    "sequelize": "^6.37.8",
+    "slugify": "^1.6.9",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "eslint": "^10.13.0",
+    "nodemon": "^3.1.14"
+  }
+}
+
+
+================================================================================
+FILE: .env.example
+================================================================================
+NODE_ENV=development
+PORT=3000
+SITE_NAME=gic-admin
+
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=gic_admin
+# set true only when you want Sequelize to alter existing tables to match models
+DB_SYNC_ALTER=false
+
+SESSION_SECRET=
+COOKIE_SECURE=false
+TRUST_PROXY=false
+
+# first admin user (created only if users table is empty)
+ADMIN_NAME=Administrator
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=
+

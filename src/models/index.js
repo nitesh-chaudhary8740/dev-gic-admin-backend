@@ -4,41 +4,47 @@ const Menu = require("./Menu");
 const MenuTranslation = require("./MenuTranslation");
 const Page = require("./Page");
 const Language = require("./Language");
+const Media = require("./Media");
 
-// A menu can have a parent and multiple child menus.
+// Menu self association
 Menu.belongsTo(Menu, {
   as: "parent",
   foreignKey: "parentId"
 });
+
 Menu.hasMany(Menu, {
   as: "children",
   foreignKey: "parentId"
 });
 
-// Each logical menu has one translation per language.
+// Menu translations
 Menu.hasMany(MenuTranslation, {
   as: "translations",
   foreignKey: "menuId"
 });
+
 MenuTranslation.belongsTo(Menu, {
   as: "menu",
   foreignKey: "menuId"
 });
 
+// Language translations
 Language.hasMany(MenuTranslation, {
   as: "translations",
   foreignKey: "languageId"
 });
+
 MenuTranslation.belongsTo(Language, {
   as: "language",
   foreignKey: "languageId"
 });
 
-// Each translated menu can have one page.
+// Page association
 MenuTranslation.hasOne(Page, {
   as: "page",
   foreignKey: "menuTranslationId"
 });
+
 Page.belongsTo(MenuTranslation, {
   as: "menuTranslation",
   foreignKey: "menuTranslationId"
@@ -49,5 +55,6 @@ module.exports = {
   Menu,
   MenuTranslation,
   Page,
-  Language
+  Language,
+  Media
 };

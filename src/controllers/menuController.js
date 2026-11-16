@@ -1,4 +1,3 @@
-
 const menuService = require("../services/menuService");
 
 const handleError = (res, error) => {
@@ -59,20 +58,12 @@ const parseId = (value) => {
 
 // --------------------------------------------------
 // CREATE MENU + FIRST TRANSLATION
+// languageId ki zaroorat nahi, backend default language use karega
 // --------------------------------------------------
 
 const createMenu = async (req, res) => {
   try {
-    const { languageId, menuTitle, menuURL, parentId, isPublished } =
-      req.body;
-
-    if (!parseId(languageId)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid languageId is required.",
-        field: "languageId",
-      });
-    }
+    const { menuTitle, menuURL, parentId, isPublished, isDefault } = req.body;
 
     if (typeof menuTitle !== "string" || !menuTitle.trim()) {
       return res.status(400).json({
@@ -113,8 +104,18 @@ const createMenu = async (req, res) => {
       });
     }
 
+    if (
+      isDefault !== undefined &&
+      typeof isDefault !== "boolean"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "isDefault must be a boolean.",
+        field: "isDefault",
+      });
+    }
+
     const menu = await menuService.createMenu({
-      languageId: parseId(languageId),
       menuTitle: menuTitle.trim(),
       menuURL: menuURL.trim(),
       parentId:
@@ -122,6 +123,7 @@ const createMenu = async (req, res) => {
           ? null
           : parseId(parentId),
       ...(isPublished !== undefined ? { isPublished } : {}),
+      ...(isDefault !== undefined ? { isDefault } : {}),
     });
 
     return res.status(201).json({
@@ -136,8 +138,6 @@ const createMenu = async (req, res) => {
 
 // --------------------------------------------------
 // GET ALL MENUS
-// Optional query: ?languageId=1
-// No languageId means CMS management view
 // --------------------------------------------------
 
 const getAllMenus = async (req, res) => {
@@ -166,8 +166,34 @@ const getAllMenus = async (req, res) => {
 };
 
 // --------------------------------------------------
+// GET DEFAULT MENU
+// GET /api/menus/default?languageId=1
+// --------------------------------------------------
+
+const getDefaultMenu = async (req, res) => {
+  try {
+    const languageId = parseId(req.query.languageId);
+
+    if (!languageId) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid languageId query parameter is required.",
+      });
+    }
+
+    const data = await menuService.getDefaultMenu(languageId);
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// --------------------------------------------------
 // GET MENU BY ID
-// Optional query: ?languageId=1
 // --------------------------------------------------
 
 const getMenuById = async (req, res) => {
@@ -206,7 +232,7 @@ const getMenuById = async (req, res) => {
 
 // --------------------------------------------------
 // UPDATE COMMON MENU FIELDS
-// parentId and isPublished
+// isDefault nahi badlega - alag endpoint hai
 // --------------------------------------------------
 
 const updateMenu = async (req, res) => {
@@ -266,6 +292,34 @@ const updateMenu = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Menu updated successfully.",
+      data: menu,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// --------------------------------------------------
+// SET DEFAULT MENU (Naya)
+// PATCH /api/menus/:id/set-default
+// --------------------------------------------------
+
+const setDefaultMenu = async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid menu ID.",
+      });
+    }
+
+    const menu = await menuService.setDefaultMenu(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Menu set as default successfully.",
       data: menu,
     });
   } catch (error) {
@@ -524,8 +578,7 @@ const restoreMenu = async (req, res) => {
 };
 
 // --------------------------------------------------
-// LANGUAGE-SPECIFIC NAVBAR HIERARCHY
-// GET /api/menus/hierarchy?languageId=1&publishedOnly=true
+// LANGUAGE-SPECIFIC NAVBAR HIERARCHY (Admin)
 // --------------------------------------------------
 
 const getMenuHierarchy = async (req, res) => {
@@ -555,12 +608,77 @@ const getMenuHierarchy = async (req, res) => {
     return handleError(res, error);
   }
 };
+// --------------------------------------------------
+// GET PARENT URL PATH
+// GET /api/menus/parent-url-path?parentId=5&languageId=1
+// --------------------------------------------------
+
+const getParentURLPath = async (req, res) => {
+  try {
+    const { parentId, languageId } = req.query;
+
+    if (!parentId || !parseId(parentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid parentId query parameter is required.",
+      });
+    }
+
+    if (!languageId || !parseId(languageId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid languageId query parameter is required.",
+      });
+    }
+
+    const data = await menuService.getParentURLPath(
+      parseId(parentId),
+      parseId(languageId)
+    );
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+// --------------------------------------------------
+// PUBLIC NAVBAR HIERARCHY (encrypted language ID)
+// --------------------------------------------------
+
+const getPublicMenuHierarchy = async (req, res) => {
+  try {
+    const { encryptedLanguageId } = req.params;
+
+    const hierarchy = await menuService.getPublicMenuHierarchy(
+      encryptedLanguageId
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Public navigation fetched successfully.",
+      data: hierarchy,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      success: false,
+      message:
+        error.status === 404
+          ? error.message
+          : "Unable to fetch public navigation.",
+    });
+  }
+};
 
 module.exports = {
   createMenu,
   getAllMenus,
   getMenuById,
+  getDefaultMenu,
   updateMenu,
+  setDefaultMenu,
   addMenuTranslation,
   updateMenuTranslation,
   publishMenu,
@@ -568,5 +686,7 @@ module.exports = {
   togglePublish,
   deleteMenu,
   restoreMenu,
+  getParentURLPath,
   getMenuHierarchy,
+  getPublicMenuHierarchy,
 };

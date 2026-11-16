@@ -17,6 +17,11 @@ const Menu = sequelize.define("Menu", {
     allowNull: false,
     defaultValue: false
   },
+  isDefault: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
   isDeleted: {
     type: DataTypes.BOOLEAN,
     allowNull: false,

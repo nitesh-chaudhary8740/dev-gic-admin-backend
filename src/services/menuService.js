@@ -1,6 +1,10 @@
-
 const { Menu, MenuTranslation, Language, Page } = require("../models");
 const sequelize = require("../config/database");
+const { Op } = require("sequelize");
+const {
+  encryptUrlParam,
+  decryptUrlParam,
+} = require("../utils/urlParamCrypto");
 
 // --------------------------------------------------
 // Helpers
@@ -129,7 +133,7 @@ const validateUniqueUrl = async (
   };
 
   if (excludeTranslationId !== null) {
-    where.id = { [require("sequelize").Op.ne]: excludeTranslationId };
+    where.id = { [Op.ne]: excludeTranslationId };
   }
 
   const existing = await MenuTranslation.findOne({
@@ -149,53 +153,80 @@ const validateUniqueUrl = async (
 
 // --------------------------------------------------
 // CREATE MENU + FIRST TRANSLATION
+// Uses default language, auto-adds language code prefix to URL
 // --------------------------------------------------
 
 const createMenu = async (data) => {
   const {
-    languageId,
     menuTitle,
     menuURL,
     parentId = null,
     isPublished = false,
+    isDefault = false,
   } = data;
 
-  if (
-    languageId === undefined ||
-    !menuTitle ||
-    !menuURL
-  ) {
-    throw createError(
-      "languageId, menuTitle and menuURL are required."
-    );
+  if (!menuTitle || !menuURL) {
+    throw createError("menuTitle and menuURL are required.");
   }
 
   return sequelize.transaction(async (transaction) => {
-    await validateLanguage(languageId, transaction);
+    // 1. Default language fetch karo
+    const defaultLanguage = await Language.findOne({
+      where: { isDefault: true, isPublished: true },
+      transaction,
+    });
+
+    if (!defaultLanguage) {
+      throw createError(
+        "Default language not set. Please set a default language first.",
+        400,
+        "DEFAULT_LANGUAGE_MISSING"
+      );
+    }
+
+    // 2. URL mein language code prefix add karo
+    let finalURL = menuURL.trim();
+    const prefix = `/${defaultLanguage.code}`;
+
+    if (!finalURL.startsWith(prefix)) {
+      if (finalURL === "/") {
+        finalURL = `${prefix}/`;
+      } else if (finalURL.startsWith("/")) {
+        finalURL = `${prefix}${finalURL}`;
+      } else {
+        finalURL = `${prefix}/${finalURL}`;
+      }
+    }
+
+    // 3. Parent validate karo
     await validateParent(parentId, null, transaction);
 
-    await validateUniqueUrl(
-      languageId,
-      menuURL,
-      null,
-      transaction
-    );
+    // 4. URL unique check
+    await validateUniqueUrl(defaultLanguage.id, finalURL, null, transaction);
 
+    // 5. Agar isDefault = true hai, toh baaki sab ka false karo
+    if (isDefault) {
+      await Menu.update({ isDefault: false }, { where: {}, transaction });
+    }
+
+    // 6. Menu create karo
     const menu = await Menu.create(
       {
         parentId,
         isPublished,
+        isDefault,
         isDeleted: false,
       },
       { transaction }
     );
 
+    // 7. Translation create karo
     const translation = await MenuTranslation.create(
       {
         menuId: menu.id,
-        languageId,
+        languageId: defaultLanguage.id,
         menuTitle,
-        menuURL,
+        menuURL: finalURL,
         isDeleted: false,
       },
       { transaction }
@@ -210,8 +241,6 @@ const createMenu = async (data) => {
 
 // --------------------------------------------------
 // GET ALL MENUS
-// languageId omitted/null: all translations for CMS
-// languageId supplied: only that language
 // --------------------------------------------------
 
 const getAllMenus = async (languageId = null) => {
@@ -231,14 +260,14 @@ const getAllMenus = async (languageId = null) => {
       {
         model: Menu,
         as: "parent",
-        attributes: ["id", "parentId", "isPublished"],
+        attributes: ["id", "parentId", "isPublished", "isDefault"],
         required: false,
       },
       {
         model: Menu,
         as: "children",
         where: { isDeleted: false },
-        attributes: ["id", "parentId", "isPublished"],
+        attributes: ["id", "parentId", "isPublished", "isDefault"],
         required: false,
       },
       {
@@ -250,7 +279,7 @@ const getAllMenus = async (languageId = null) => {
           {
             model: Language,
             as: "language",
-            attributes: ["id", "name", "code", "isPublished"],
+            attributes: ["id", "name", "code", "displayName", "isPublished"],
           },
           {
             model: Page,
@@ -287,7 +316,7 @@ const getMenuById = async (menuId, languageId = null) => {
       {
         model: Menu,
         as: "parent",
-        attributes: ["id", "parentId", "isPublished"],
+        attributes: ["id", "parentId", "isPublished", "isDefault"],
         required: false,
       },
       {
@@ -305,7 +334,7 @@ const getMenuById = async (menuId, languageId = null) => {
           {
             model: Language,
             as: "language",
-            attributes: ["id", "name", "code", "isPublished"],
+            attributes: ["id", "name", "code", "displayName", "isPublished"],
           },
           {
             model: Page,
@@ -326,8 +355,62 @@ const getMenuById = async (menuId, languageId = null) => {
 };
 
 // --------------------------------------------------
+// GET DEFAULT MENU (by language)
+// --------------------------------------------------
+
+const getDefaultMenu = async (languageId) => {
+  // 1. Default menu dhundo
+  const menu = await Menu.findOne({
+    where: { isDefault: true, isDeleted: false },
+  });
+
+  if (!menu) {
+    throw createError("Default menu not found.", 404);
+  }
+
+  // 2. Us menu ki di gayi language mein translation dhundo
+  const translation = await MenuTranslation.findOne({
+    where: {
+      menuId: menu.id,
+      languageId,
+      isDeleted: false,
+    },
+    include: [
+      {
+        model: Language,
+        as: "language",
+        attributes: ["id", "name", "code", "displayName", "isDefault"],
+      },
+      {
+        model: Page,
+        as: "page",
+        where: { isDeleted: false },
+        required: false,
+      },
+    ],
+  });
+
+  if (!translation) {
+    throw createError(
+      "Default menu translation not found for this language.",
+      404
+    );
+  }
+
+  return {
+    menuId: menu.id,
+    menuTranslationId: translation.id,
+    menuTitle: translation.menuTitle,
+    menuURL: translation.menuURL,
+    languageId: translation.languageId,
+    language: translation.language,
+    content: translation.page?.content || "",
+    isPublished: translation.page?.isPublished || false,
+  };
+};
+
+// --------------------------------------------------
 // UPDATE COMMON MENU FIELDS
-// parentId and menu-level publication
 // --------------------------------------------------
 
 const updateMenu = async (menuId, data) => {
@@ -347,6 +430,8 @@ const updateMenu = async (menuId, data) => {
       updates.isPublished = data.isPublished;
     }
 
+    // isDefault updateMenu se nahi badlega - alag endpoint hai
+
     await menu.update(updates, { transaction });
 
     return menu;
@@ -354,8 +439,42 @@ const updateMenu = async (menuId, data) => {
 };
 
 // --------------------------------------------------
+// SET DEFAULT MENU
+// --------------------------------------------------
+
+const setDefaultMenu = async (menuId) => {
+  return sequelize.transaction(async (transaction) => {
+    const menu = await Menu.findOne({
+      where: { id: menuId, isDeleted: false },
+      transaction,
+    });
+
+    if (!menu) {
+      throw createError("Menu not found.", 404);
+    }
+
+    if (!menu.isPublished) {
+      throw createError(
+        "Cannot set an unpublished menu as default.",
+        400
+      );
+    }
+
+    // Baaki sab ka isDefault = false karo
+    await Menu.update(
+      { isDefault: false },
+      { where: { id: { [Op.ne]: menuId } }, transaction }
+    );
+
+    // Is menu ko default banao
+    await menu.update({ isDefault: true }, { transaction });
+
+    return menu;
+  });
+};
+
+// --------------------------------------------------
 // ADD ANOTHER LANGUAGE TO EXISTING MENU
-// Does not create another Menu record
 // --------------------------------------------------
 
 const addMenuTranslation = async (menuId, data) => {
@@ -373,7 +492,21 @@ const addMenuTranslation = async (menuId, data) => {
 
   return sequelize.transaction(async (transaction) => {
     await getActiveMenu(menuId, transaction);
-    await validateLanguage(languageId, transaction);
+    const language = await validateLanguage(languageId, transaction);
+
+    // URL mein language code prefix add karo
+    let finalURL = menuURL.trim();
+    const prefix = `/${language.code}`;
+
+    if (!finalURL.startsWith(prefix)) {
+      if (finalURL === "/") {
+        finalURL = `${prefix}/`;
+      } else if (finalURL.startsWith("/")) {
+        finalURL = `${prefix}${finalURL}`;
+      } else {
+        finalURL = `${prefix}/${finalURL}`;
+      }
+    }
 
     const existing = await MenuTranslation.findOne({
       where: {
@@ -401,7 +534,7 @@ const addMenuTranslation = async (menuId, data) => {
 
     await validateUniqueUrl(
       languageId,
-      menuURL,
+      finalURL,
       null,
       transaction
     );
@@ -411,7 +544,7 @@ const addMenuTranslation = async (menuId, data) => {
         menuId,
         languageId,
         menuTitle,
-        menuURL,
+        menuURL: finalURL,
         isDeleted: false,
       },
       { transaction }
@@ -421,7 +554,6 @@ const addMenuTranslation = async (menuId, data) => {
 
 // --------------------------------------------------
 // UPDATE TRANSLATION TITLE / URL
-// Language changes are handled by adding a translation
 // --------------------------------------------------
 
 const updateMenuTranslation = async (
@@ -445,17 +577,33 @@ const updateMenuTranslation = async (
     }
 
     if (data.menuURL !== undefined) {
+      // Language code prefix add karo agar nahi hai
+      const language = await Language.findByPk(translation.languageId, {
+        transaction,
+      });
+      let finalURL = data.menuURL.trim();
+      const prefix = `/${language.code}`;
+
+      if (!finalURL.startsWith(prefix)) {
+        if (finalURL === "/") {
+          finalURL = `${prefix}/`;
+        } else if (finalURL.startsWith("/")) {
+          finalURL = `${prefix}${finalURL}`;
+        } else {
+          finalURL = `${prefix}/${finalURL}`;
+        }
+      }
+
       await validateUniqueUrl(
         translation.languageId,
-        data.menuURL,
+        finalURL,
         menuTranslationId,
         transaction
       );
 
-      updates.menuURL = data.menuURL;
+      updates.menuURL = finalURL;
     }
 
-    // Do not change menuId/languageId through this method.
     await translation.update(updates, { transaction });
 
     return translation;
@@ -490,7 +638,6 @@ const togglePublish = async (menuId) => {
 
 // --------------------------------------------------
 // SOFT DELETE MENU
-// Require children/translations to be handled first
 // --------------------------------------------------
 
 const deleteMenu = async (menuId) => {
@@ -531,6 +678,7 @@ const deleteMenu = async (menuId) => {
       {
         isDeleted: true,
         isPublished: false,
+        isDefault: false,
       },
       { transaction }
     );
@@ -578,7 +726,7 @@ const restoreMenu = async (menuId) => {
 };
 
 // --------------------------------------------------
-// LANGUAGE-SPECIFIC NESTED NAVBAR
+// LANGUAGE-SPECIFIC NESTED NAVBAR (Admin)
 // --------------------------------------------------
 
 const getMenuHierarchy = async (
@@ -605,7 +753,7 @@ const getMenuHierarchy = async (
 
   const menus = await Menu.findAll({
     where: menuWhere,
-    attributes: ["id", "parentId", "isPublished"],
+    attributes: ["id", "parentId", "isPublished", "isDefault"],
     include: [
       {
         model: MenuTranslation,
@@ -633,6 +781,7 @@ const getMenuHierarchy = async (
       id: menu.id,
       parentId: menu.parentId,
       isPublished: Boolean(menu.isPublished),
+      isDefault: Boolean(menu.isDefault),
       menuTranslationId: translation.id,
       languageId: translation.languageId,
       menuTitle: translation.menuTitle,
@@ -653,12 +802,183 @@ const getMenuHierarchy = async (
 
   return tree;
 };
+// --------------------------------------------------
+// GET PARENT URL PATH (for new menu URL generation)
+// Given a parent menu ID and language ID, returns the full
+// URL path of the parent hierarchy in that language.
+// --------------------------------------------------
+
+const getParentURLPath = async (parentId, languageId) => {
+  if (!parentId || !languageId) {
+    throw createError("parentId and languageId are required.", 400);
+  }
+
+  // Language validate karo
+  const language = await Language.findByPk(languageId);
+  if (!language || !language.isPublished) {
+    throw createError("Published language not found.", 404);
+  }
+
+  // Parent menu dhundo
+  const parent = await Menu.findOne({
+    where: { id: parentId, isDeleted: false },
+  });
+  if (!parent) {
+    throw createError("Parent menu not found.", 404);
+  }
+
+  // Parent hierarchy build karo (root tak)
+  const path = [];
+  let current = parent;
+  const visited = new Set();
+
+  while (current) {
+    if (visited.has(current.id)) {
+      throw createError("Menu hierarchy has a cycle.", 400);
+    }
+    visited.add(current.id);
+
+    // Har menu ki translation dhundo us language mein
+    const translation = await MenuTranslation.findOne({
+      where: {
+        menuId: current.id,
+        languageId,
+        isDeleted: false,
+      },
+      attributes: ["id", "menuURL", "menuTitle"],
+    });
+
+    if (!translation) {
+      // Translation missing — 400 error with details
+      throw createError(
+        `Translation missing for menu ID ${current.id} in language "${language.code}". ` +
+        `Please add the translation for this menu first.`,
+        400,
+        "PARENT_TRANSLATION_MISSING"
+      );
+    }
+
+    path.unshift({
+      menuId: current.id,
+      menuTitle: translation.menuTitle,
+      menuURL: translation.menuURL,
+    });
+
+    current = current.parentId
+      ? await Menu.findOne({ where: { id: current.parentId, isDeleted: false } })
+      : null;
+  }
+
+  // Full URL path build karo (last entry ka URL hi parent path hai)
+  // Example: /en/about-us/corporate-management
+  const parentURL = path[path.length - 1]?.menuURL || `/${language.code}/`;
+
+  return {
+    languageId,
+    languageCode: language.code,
+    parentId,
+    hierarchy: path,
+    parentURL, // Is URL ke baad new menu ka slug append hoga
+  };
+};
+// --------------------------------------------------
+// PUBLIC NAVBAR HIERARCHY (by encrypted language ID)
+// --------------------------------------------------
+
+async function getPublicMenuHierarchy(encryptedLanguageId) {
+  let languageId;
+
+  try {
+    languageId = decryptUrlParam(encryptedLanguageId);
+  } catch {
+    throw Object.assign(new Error("Published language not found."), {
+      status: 404,
+    });
+  }
+
+  if (!/^[1-9]\d*$/.test(languageId)) {
+    throw Object.assign(new Error("Published language not found."), {
+      status: 404,
+    });
+  }
+
+  const language = await Language.findOne({
+    where: {
+      id: languageId,
+      isPublished: true,
+    },
+    attributes: ["id"],
+  });
+
+  if (!language) {
+    throw Object.assign(new Error("Published language not found."), {
+      status: 404,
+    });
+  }
+
+  const menus = await Menu.findAll({
+    where: {
+      isDeleted: false,
+      isPublished: true,
+    },
+    attributes: ["id", "parentId", "isDefault"],
+    include: [
+      {
+        model: MenuTranslation,
+        as: "translations",
+        where: {
+          languageId: language.id,
+          isDeleted: false,
+        },
+        required: true,
+        attributes: ["id", "menuTitle", "menuURL"],
+      },
+    ],
+    order: [["id", "ASC"]],
+  });
+
+  const nodes = new Map();
+
+  for (const record of menus) {
+    const menu = record.get({ plain: true });
+    const translation = menu.translations?.[0];
+
+    if (!translation) continue;
+
+    nodes.set(menu.id, {
+      publicId: encryptUrlParam(translation.id),
+      title: translation.menuTitle,
+      url: translation.menuURL,
+      isDefault: Boolean(menu.isDefault),
+      children: [],
+      _parentId: menu.parentId,
+    });
+  }
+
+  const roots = [];
+
+  for (const node of nodes.values()) {
+    const parentId = node._parentId;
+
+    delete node._parentId;
+
+    if (parentId !== null && nodes.has(parentId)) {
+      nodes.get(parentId).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
 
 module.exports = {
   createMenu,
   getAllMenus,
   getMenuById,
+  getDefaultMenu,
   updateMenu,
+  setDefaultMenu,
   addMenuTranslation,
   updateMenuTranslation,
   publishMenu,
@@ -666,5 +986,7 @@ module.exports = {
   togglePublish,
   deleteMenu,
   restoreMenu,
+  getParentURLPath,
   getMenuHierarchy,
+  getPublicMenuHierarchy,
 };

@@ -1,4 +1,3 @@
-
 const {
   Page,
   Menu,
@@ -7,7 +6,8 @@ const {
 } = require("../models");
 
 const sequelize = require("../config/database");
-const { decryptUrlParam } = require("../utils/urlParamCrypto");
+const { decryptUrlParam, encryptUrlParam } = require("../utils/urlParamCrypto"); // ✅ encryptUrlParam add kiya
+
 // --------------------------------------------------
 // Helpers
 // --------------------------------------------------
@@ -125,6 +125,7 @@ const pageDetailsInclude = [
           "parentId",
           "isPublished",
           "isDeleted",
+          "isDefault",
         ],
       },
       {
@@ -135,7 +136,9 @@ const pageDetailsInclude = [
           "id",
           "name",
           "code",
+          "displayName",
           "isPublished",
+          "isDefault",
         ],
       },
     ],
@@ -144,7 +147,6 @@ const pageDetailsInclude = [
 
 // --------------------------------------------------
 // CREATE PAGE
-// One page per menu translation
 // --------------------------------------------------
 
 const createPage = async (data) => {
@@ -216,7 +218,6 @@ const createPage = async (data) => {
 
 // --------------------------------------------------
 // GET ALL ACTIVE PAGES
-// CMS management
 // --------------------------------------------------
 
 const getAllPages = async () => {
@@ -251,7 +252,6 @@ const getPageById = async (id) => {
 
 // --------------------------------------------------
 // UPDATE PAGE
-// Relation is immutable through this method
 // --------------------------------------------------
 
 const updatePage = async (id, data) => {
@@ -283,8 +283,6 @@ const updatePage = async (id, data) => {
       updates.isPublished = data.isPublished;
     }
 
-    // Do not accept menuId, languageId, or
-    // menuTranslationId changes through this method.
     await page.update(updates, { transaction });
 
     return page;
@@ -359,8 +357,6 @@ const togglePublish = async (id) => {
 
 // --------------------------------------------------
 // INTERNAL SOFT DELETE
-// Do not expose an independent page-delete route
-// if deletion is managed through menu translations.
 // --------------------------------------------------
 
 const deletePage = async (id, transaction = null) => {
@@ -387,7 +383,6 @@ const deletePage = async (id, transaction = null) => {
 
 // --------------------------------------------------
 // RESTORE PAGE
-// Only when its translation and menu are active
 // --------------------------------------------------
 
 const restorePage = async (id) => {
@@ -421,6 +416,11 @@ const restorePage = async (id) => {
   });
 };
 
+// --------------------------------------------------
+// GET PAGE CONTENT (by encrypted menuId + languageId)
+// Used for language change (same menu, new language)
+// --------------------------------------------------
+
 const getPageContent = async (
   encryptedMenuId,
   encryptedLanguageId
@@ -435,7 +435,6 @@ const getPageContent = async (
     throw createError("Invalid encrypted parameters.", 400);
   }
 
-  // Validate decrypted IDs
   if (
     !/^[1-9]\d*$/.test(menuId) ||
     !/^[1-9]\d*$/.test(languageId) ||
@@ -457,7 +456,7 @@ const getPageContent = async (
         model: Menu,
         as: "menu",
         required: true,
-        attributes: [],
+        attributes: ["id", "isDefault"],
         where: {
           isDeleted: false,
           isPublished: true,
@@ -467,7 +466,7 @@ const getPageContent = async (
         model: Language,
         as: "language",
         required: true,
-        attributes: ["name", "code"],
+        attributes: ["id", "name", "code", "displayName", "isDefault"],
         where: {
           isPublished: true,
         },
@@ -475,12 +474,13 @@ const getPageContent = async (
       {
         model: Page,
         as: "page",
-        required: true,
-        attributes: ["content"],
+        required: false, // false: page na ho toh bhi translation return ho
+        attributes: ["content", "isPublished"],
         where: {
           isPublished: true,
           isDeleted: false,
         },
+        required: false,
       },
     ],
   });
@@ -492,22 +492,33 @@ const getPageContent = async (
     );
   }
 
+  // ✅ Return object se plain IDs hataye, encrypted ID add ki
   return {
+    encryptedMenuTranslationId: encryptUrlParam(translation.id),
     title: translation.menuTitle,
     url: translation.menuURL,
-    content: translation.page.content,
+    content: translation.page ? translation.page.content : null,
+    isPublished: translation.page ? translation.page.isPublished : false,
+    isDefaultMenu: Boolean(translation.menu?.isDefault),
     language: {
+      id: translation.language.id,
       name: translation.language.name,
       code: translation.language.code,
+      displayName: translation.language.displayName,
+      isDefault: translation.language.isDefault,
     },
   };
 };
 
+// --------------------------------------------------
+// GET PAGE CONTENT BY URL
+// Used for direct URL access (e.g., /en/about-us)
+// --------------------------------------------------
 
+//Menu-click event se pehle, URL ke basis pe page content fetch karne ke liye ye function use hota hai. Ye function encrypted language ID aur raw URL ko accept karta hai, aur corresponding published page content return karta hai.
 const getPageContentByUrl = async (encryptedLanguageId, rawUrl) => {
   let languageId;
 
-  // 1. Decrypt & Validate Language ID
   try {
     languageId = decryptUrlParam(encryptedLanguageId);
   } catch {
@@ -521,34 +532,35 @@ const getPageContentByUrl = async (encryptedLanguageId, rawUrl) => {
     throw createError("Invalid encrypted language ID.", 400);
   }
 
-  // 2. Normalize URL (Ensure leading slash and no trailing slash)
   if (!rawUrl) {
     throw createError("URL parameter is required.", 400);
   }
 
+  // ✅ Simple Normalization: Bina trailing slash hatae, slash add karo
   let normalizedUrl = decodeURIComponent(rawUrl).trim();
+  
   if (!normalizedUrl.startsWith("/")) {
     normalizedUrl = `/${normalizedUrl}`;
   }
-  // Remove trailing slash (optional, depends on how you save URLs in DB)
-  if (normalizedUrl.length > 1 && normalizedUrl.endsWith("/")) {
-    normalizedUrl = normalizedUrl.slice(0, -1);
+
+  // ✅ Agar last mein "/" nahi hai, toh add karo
+  if (normalizedUrl.slice(-1) !== "/") {
+    normalizedUrl = `${normalizedUrl}/`;
   }
 
-  // 3. Fetch MenuTranslation based on URL and Language
   const translation = await MenuTranslation.findOne({
     where: {
       languageId: Number(languageId),
-      menuURL: normalizedUrl,
+      menuURL: normalizedUrl, // ✅ Ab match karega
       isDeleted: false,
     },
-    attributes: ["id", "menuTitle", "menuURL"],
+    attributes: ["id", "menuId", "menuTitle", "menuURL"],
     include: [
       {
         model: Menu,
         as: "menu",
         required: true,
-        attributes: [],
+        attributes: ["id", "isDefault"],
         where: {
           isDeleted: false,
           isPublished: true,
@@ -558,7 +570,7 @@ const getPageContentByUrl = async (encryptedLanguageId, rawUrl) => {
         model: Language,
         as: "language",
         required: true,
-        attributes: ["name", "code"],
+        attributes: ["id", "name", "code", "displayName", "isDefault"],
         where: {
           isPublished: true,
         },
@@ -566,7 +578,7 @@ const getPageContentByUrl = async (encryptedLanguageId, rawUrl) => {
       {
         model: Page,
         as: "page",
-        required: false, // `false` rakha hai kyunki kuch pages custom React component ho sakte hain (content: null)
+        required: false,
         attributes: ["content", "isPublished"],
         where: {
           isPublished: true,
@@ -583,17 +595,113 @@ const getPageContentByUrl = async (encryptedLanguageId, rawUrl) => {
     );
   }
 
-  // 4. Return formatted response
   return {
+    encryptedMenuTranslationId: encryptUrlParam(translation.id),
     title: translation.menuTitle,
     url: translation.menuURL,
     content: translation.page ? translation.page.content : null,
+    isPublished: translation.page ? translation.page.isPublished : false,
+    isDefaultMenu: Boolean(translation.menu?.isDefault),
     language: {
+      id: translation.language.id,
       name: translation.language.name,
       code: translation.language.code,
+      displayName: translation.language.displayName,
+      isDefault: translation.language.isDefault,
     },
   };
 };
+// --------------------------------------------------
+// GET PAGE CONTENT BY TRANSLATION ID + NEW LANGUAGE ID (Naya)
+// Used for language change (Translation ID -> Menu ID -> New Language Content)
+// --------------------------------------------------
+//language change ke liye, jab user ek menu ka content dekh raha ho aur language change kare, toh ye function use hota hai. Ye function encrypted translation ID aur encrypted new language ID ko accept karta hai, aur corresponding published page content return karta hai.
+const getPageContentByTranslation = async (encryptedTranslationId, encryptedLanguageId) => {
+  let translationId;
+  let newLanguageId;
+
+  // 1. Decrypt IDs
+  try {
+    translationId = decryptUrlParam(encryptedTranslationId);
+    newLanguageId = decryptUrlParam(encryptedLanguageId);
+  } catch {
+    throw createError("Invalid encrypted parameters.", 400);
+  }
+
+  // 2. Validate IDs
+  if (!/^[1-9]\d*$/.test(translationId) || !/^[1-9]\d*$/.test(newLanguageId)) {
+    throw createError("Invalid encrypted parameters.", 400);
+  }
+
+  // 3. Current translation dhundo (isse menuId milega)
+  const currentTranslation = await MenuTranslation.findByPk(translationId);
+  if (!currentTranslation) {
+    throw createError("Current translation not found.", 404);
+  }
+
+  const menuId = currentTranslation.menuId;
+
+  // 4. Naye language ke liye usi menu ki translation dhundo
+  const newTranslation = await MenuTranslation.findOne({
+    where: {
+      menuId,
+      languageId: newLanguageId,
+      isDeleted: false,
+    },
+    attributes: ["id", "menuId", "menuTitle", "menuURL"],
+    include: [
+      {
+        model: Menu,
+        as: "menu",
+        required: true,
+        attributes: ["id", "isDefault"],
+        where: {
+          isDeleted: false,
+          isPublished: true,
+        },
+      },
+      {
+        model: Language,
+        as: "language",
+        required: true,
+        attributes: ["id", "name", "code", "displayName", "isDefault"],
+        where: { isPublished: true },
+      },
+      {
+        model: Page,
+        as: "page",
+        required: false, // Content missing ho sakta hai (React page)
+        attributes: ["content", "isPublished"],
+        where: { isPublished: true, isDeleted: false },
+      },
+    ],
+  });
+
+  if (!newTranslation) {
+    throw createError(
+      "Translation not found for this menu in the selected language.",
+      404
+    );
+  }
+
+  // ✅ Return object se plain IDs hataye, encrypted ID add ki
+  return {
+    encryptedMenuTranslationId: encryptUrlParam(newTranslation.id),
+    title: newTranslation.menuTitle,
+    url: newTranslation.menuURL, // Naya URL (e.g. /hi/hamare-bare-mein)
+    content: newTranslation.page ? newTranslation.page.content : null,
+    isPublished: newTranslation.page ? newTranslation.page.isPublished : false,
+    isDefaultMenu: Boolean(newTranslation.menu?.isDefault),
+    language: {
+      id: newTranslation.language.id,
+      name: newTranslation.language.name,
+      code: newTranslation.language.code,
+      displayName: newTranslation.language.displayName,
+      isDefault: newTranslation.language.isDefault,
+    },
+  };
+};
+
 module.exports = {
   createPage,
   getAllPages,
@@ -607,5 +715,6 @@ module.exports = {
   deletePage,
   restorePage,
   getPageContent,
-  getPageContentByUrl
+  getPageContentByUrl,
+  getPageContentByTranslation,
 };

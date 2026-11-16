@@ -4,9 +4,10 @@ const router = express.Router();
 const languageController = require("../controllers/languageController");
 
 // ==========================================
-// PUBLIC ROUTES (static paths FIRST)
+// PUBLIC & STATIC ROUTES (static paths FIRST)
 // ==========================================
 router.get("/published", languageController.getPublishedLanguages);
+router.get("/default", languageController.getDefaultLanguage);
 router.get("/public", languageController.getPublicLanguages);
 router.get(
   "/public/:encryptedId",
@@ -20,6 +21,7 @@ router.post("/", languageController.createLanguage);
 router.get("/", languageController.getAllLanguages);
 router.get("/:id", languageController.getLanguageById);
 router.put("/:id", languageController.updateLanguage);
+router.patch("/:id/set-default", languageController.setDefaultLanguage); // Naya
 router.patch("/:id/publish", languageController.publishLanguage);
 router.patch("/:id/unpublish", languageController.unpublishLanguage);
 

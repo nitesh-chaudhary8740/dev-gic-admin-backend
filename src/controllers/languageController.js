@@ -1,4 +1,3 @@
-
 const languageService = require("../services/languageService");
 
 const handleError = (res, error) => {
@@ -53,7 +52,7 @@ const handleError = (res, error) => {
 
 const createLanguage = async (req, res) => {
   try {
-    const { name, code, isPublished } = req.body;
+    const { name, code, displayName, isPublished, isDefault } = req.body;
 
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({
@@ -71,6 +70,14 @@ const createLanguage = async (req, res) => {
       });
     }
 
+    if (typeof displayName !== "string" || !displayName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Display name is required.",
+        field: "displayName",
+      });
+    }
+
     if (
       isPublished !== undefined &&
       typeof isPublished !== "boolean"
@@ -82,10 +89,23 @@ const createLanguage = async (req, res) => {
       });
     }
 
+    if (
+      isDefault !== undefined &&
+      typeof isDefault !== "boolean"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "isDefault must be a boolean.",
+        field: "isDefault",
+      });
+    }
+
     const language = await languageService.createLanguage({
       name: name.trim(),
       code: code.trim(),
+      displayName: displayName.trim(),
       ...(isPublished !== undefined ? { isPublished } : {}),
+      ...(isDefault !== undefined ? { isDefault } : {}),
     });
 
     return res.status(201).json({
@@ -116,7 +136,7 @@ const getAllLanguages = async (req, res) => {
 };
 
 // --------------------------------------------------
-// GET PUBLISHED LANGUAGES - PUBLIC SITE
+// GET PUBLISHED LANGUAGES - PUBLIC SITE (internal)
 // --------------------------------------------------
 
 const getPublishedLanguages = async (req, res) => {
@@ -127,6 +147,23 @@ const getPublishedLanguages = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: languages,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// --------------------------------------------------
+// GET DEFAULT LANGUAGE
+// --------------------------------------------------
+
+const getDefaultLanguage = async (req, res) => {
+  try {
+    const language = await languageService.getDefaultLanguage();
+
+    return res.status(200).json({
+      success: true,
+      data: language,
     });
   } catch (error) {
     return handleError(res, error);
@@ -152,12 +189,12 @@ const getLanguageById = async (req, res) => {
 };
 
 // --------------------------------------------------
-// UPDATE LANGUAGE
+// UPDATE LANGUAGE (isDefault nahi badlega)
 // --------------------------------------------------
 
 const updateLanguage = async (req, res) => {
   try {
-    const { name, code, isPublished } = req.body;
+    const { name, code, displayName, isPublished } = req.body;
 
     if (
       name !== undefined &&
@@ -182,6 +219,17 @@ const updateLanguage = async (req, res) => {
     }
 
     if (
+      displayName !== undefined &&
+      (typeof displayName !== "string" || !displayName.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "displayName must be a non-empty string.",
+        field: "displayName",
+      });
+    }
+
+    if (
       isPublished !== undefined &&
       typeof isPublished !== "boolean"
     ) {
@@ -195,6 +243,7 @@ const updateLanguage = async (req, res) => {
     const updates = {
       ...(name !== undefined ? { name: name.trim() } : {}),
       ...(code !== undefined ? { code: code.trim() } : {}),
+      ...(displayName !== undefined ? { displayName: displayName.trim() } : {}),
       ...(isPublished !== undefined ? { isPublished } : {}),
     };
 
@@ -206,6 +255,26 @@ const updateLanguage = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Language updated successfully.",
+      data: language,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// --------------------------------------------------
+// SET DEFAULT LANGUAGE (Naya)
+// --------------------------------------------------
+
+const setDefaultLanguage = async (req, res) => {
+  try {
+    const language = await languageService.setDefaultLanguage(
+      req.params.id
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Language set as default successfully.",
       data: language,
     });
   } catch (error) {
@@ -250,6 +319,11 @@ const unpublishLanguage = async (req, res) => {
     return handleError(res, error);
   }
 };
+
+// --------------------------------------------------
+// GET PUBLIC LANGUAGES (encrypted IDs)
+// --------------------------------------------------
+
 const getPublicLanguages = async (req, res) => {
   try {
     const languages = await languageService.getPublicLanguages();
@@ -272,7 +346,10 @@ const getPublicLanguages = async (req, res) => {
   }
 };
 
-// GET /api/languages/public/:encryptedId
+// --------------------------------------------------
+// GET PUBLIC LANGUAGE BY ENCRYPTED ID
+// --------------------------------------------------
+
 const getPublicLanguageById = async (req, res) => {
   try {
     const { encryptedId } = req.params;
@@ -298,14 +375,14 @@ const getPublicLanguageById = async (req, res) => {
   }
 };
 
-
-
 module.exports = {
   createLanguage,
   getAllLanguages,
   getPublishedLanguages,
+  getDefaultLanguage,
   getLanguageById,
   updateLanguage,
+  setDefaultLanguage,
   publishLanguage,
   unpublishLanguage,
   getPublicLanguages,

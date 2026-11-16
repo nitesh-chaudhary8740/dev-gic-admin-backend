@@ -41,5 +41,8 @@ router.patch("/:id/toggle-publish", pageController.togglePublish);
 // Get, update page details
 router.get("/:id", pageController.getPageById);
 router.patch("/:id", pageController.updatePage);
-
+router.get(
+  "/content-by-translation/:encryptedTranslationId/:encryptedLanguageId",
+  pageController.getPageContentByTranslation
+);
 module.exports = router;
