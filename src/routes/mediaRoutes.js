@@ -1,70 +1,52 @@
+
 const express = require("express");
 const router = express.Router();
 
 const MediaController = require("../controllers/MediaController");
 const MediaFormatController = require("../controllers/MediaFormatController");
 
-// 🟢 Import both middlewares
-const { upload, bulkUpload } = require("../middlewares/mediaUpload");
+const {
+  upload,
+  bulkUpload
+} = require("../middlewares/mediaUpload");
 
-// ======================================
+// =====================================================
 // MEDIA CONTENTS
-// ======================================
+// =====================================================
 
 router.get(
   "/contents",
   MediaController.getContentByLocation
 );
 
-// ======================================
+// =====================================================
 // FILE MANAGEMENT
-// ======================================
+// =====================================================
 
-// Upload media file (Single)
+// Single file upload
 router.post(
   "/upload",
-  upload.single("file"), // Ab yahan 'upload' defined hai
+  upload.single("file"),
   MediaController.uploadFile
 );
 
-// 🟢 Upload media files (Bulk)
+// Bulk file upload
 router.post(
   "/bulk-upload",
   bulkUpload.array("files", 100),
   MediaController.bulkUpload
 );
 
-// 🟢 SSE Progress Endpoint
+// Bulk upload progress (SSE)
 router.get(
   "/upload-progress/:uploadId",
-  (req, res) => {
-    const { uploadId } = req.params;
+  MediaController.getUploadProgress
+);
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    if (!req.app.locals.uploadProgress) {
-      req.app.locals.uploadProgress = {};
-    }
-
-    const sendUpdate = () => {
-      const data = req.app.locals.uploadProgress[uploadId];
-      if (data) {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      } else {
-        res.write(`data: ${JSON.stringify({ status: "waiting", message: "Waiting for upload to start..." })}\n\n`);
-      }
-    };
-
-    sendUpdate();
-    const interval = setInterval(sendUpdate, 500);
-
-    req.on("close", () => {
-      clearInterval(interval);
-    });
-  }
+// Cancel bulk upload
+router.post(
+  "/cancel-upload/:uploadId",
+  MediaController.cancelBulkUpload
 );
 
 // Delete media file
@@ -72,10 +54,10 @@ router.delete(
   "/files/:id",
   MediaController.deleteFile
 );
-
-// ======================================
+router.delete("/files", MediaController.deleteFiles);
+// =====================================================
 // FOLDER MANAGEMENT
-// ======================================
+// =====================================================
 
 router.post(
   "/folders",
@@ -87,9 +69,9 @@ router.delete(
   MediaController.deleteFolder
 );
 
-// ======================================
+// =====================================================
 // MEDIA FORMAT MANAGEMENT
-// ======================================
+// =====================================================
 
 router.get(
   "/formats",

@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+public/
 
 # Environment variables & Uploads
 .env

@@ -1,0 +1,69 @@
+Received: from mail-dy1-f178.google.com (Unknown [10.244.15.138])
+	by buildkitsandbox (Haraka/3.2.1) with ESMTP id DB5A3488-04E3-4200-B10A-058908862807.1
+	envelope-from <netbeans754@gmail.com>;
+	Wed, 07 Oct 2026 05:19:33 +0000
+Received: by mail-dy1-f178.google.com with SMTP id 5a478bee46e88-3282db206d3so10427938eec.0
+        for <feleta7185@aminavin.com>; Tue, 06 Oct 2026 22:19:33 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20251104; t=1791350372; x=1791955172; darn=aminavin.com;
+        h=content-transfer-encoding:content-type:subject:to:from:mime-version
+         :date:message-id:from:to:cc:subject:date:message-id:reply-to
+         :content-type;
+        bh=BUeKYIc5uOnUb3rOPESAWBO+OZFJEV41Ho/gOo6fUps=;
+        b=gxj4D750KY7nej9+dR8XvxIMIWllCY+JXURt4DDZ3mDoTYaCVkBlNcQfGe/X9j3eKg
+         jIoNoGHuXyF8NVi6LcoxbkYQqM3rsmORi0z1Vokf3QQFlkRCZ8YygJHTDxf8w/CvRK/D
+         jLGLYX9Ebe7W5yVoCCCJENr5fBQ4HBMNrGSrMfjMfu/pMJ3y79922DB7/Dlpy76Wp3rs
+         2TzMZ+wM3yZtvs4ib1CyB2MckSFosgqJ9TtiODkJP1pACoC9QTihrlR+wg4+5DapM857
+         ueF+RaN9vNckD1WM24x5+EKezNuAN+rDLKoT5Z6svV0G2KtvS9eizLirN0Ss24xEAqYr
+         h3Dg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20260707; t=1791350372; x=1791955172;
+        h=content-transfer-encoding:content-type:subject:to:from:mime-version
+         :date:message-id:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to:content-type;
+        bh=BUeKYIc5uOnUb3rOPESAWBO+OZFJEV41Ho/gOo6fUps=;
+        b=109L4QTBtXNzZ9Lp6/pKL0BmtW5CeE2/1Nfj1JQ0fCF4LQVUZlMP4NFwGYaoY5chZI
+         0VfRQDdHXuiTNCEf2VW4AhwBANqeHE4oHGP/ccrHDQpN8fENgKCCTrvJwMcMkaqBmc+H
+         zFyHIHYQ64PXHCXBlq2vVRpcEQuMyNBLxp09y8YCudNK0NiPGCJ4UZQkH300TmuxMEZ9
+         b2h8mxi/DpnPXOefin2EGPbNzz/Vk6Szt+Eo2OkuscOXYW57NCs+/U1OWxTBC2gZkJ0J
+         i69Kxg47atjwtM332TjjNooMqfSoKZKyRsQDZzcqD0Dt32w1XZEcFbslsDlryfoRxncW
+         5+PA==
+X-Gm-Message-State: AFq9FYK01N5SJBw8K9S+32+xwmXjExDZcoH9+QBk0nllKgAUZv/jqJY0
+	Q7uKNJmjzPpYl5TE7tJPsv07iXParZV1a4vlZFOpJ9ptOt7Y4M0KQLveVdh4NpyQ
+X-Gm-Gg: AYBFou3Q7ZA4BsVcDbH7bEvNWe0Wa+xmmhPXzZsNCPJrOO28zp1rSG7cA/RcSAE1vNt
+	FuKbrucKJ+mOqoLlKTpmIXFkSMvOGvwP91w/+TEkDkSRgvGkVnoFeVpHnzJ8BxzWUmONzmjiH+H
+	B/ZnAS9ziPEx47hGkH2mbYNx0AMrWHzbNu0eD4yr9K1zFA8F9b1Va1TVlzq/TNH2ZwYRHTK834Q
+	QV23JOJofewhoXBh1PKkubhqfQ+7LCOYmVOqMyJ6OV8/B8xOAHSghIySba51rYZvXdjXMENYidE
+	zjaek9pkJIadmOh9CFh9sUYMpY2EUbieyd7ko4xMQf4OW/ezsaEnncilhGxB6CVI4aEh4ywIstv
+	5nbJBQZViMRfQsihySXawVFRtPW68EP3CiUEgVVCKJc4ZHI7/DF/92EZ4U9tgUnJgqEdICwdapg
+	/LX9suigJfZfKzEydcC1thO7/5R0fOu4W1q0T2Nq+LSxCL1G2ZOIg8nsOJwsirJaOCt31UETiba
+	4scwL44n8xIYZtExrY=
+X-Received: by 2002:a05:7301:670c:b0:343:fdea:9a4 with SMTP id 5a478bee46e88-3515de767b4mr1768277eec.28.1791350372297;
+        Tue, 06 Oct 2026 22:19:32 -0700 (PDT)
+Return-Path: <netbeans754@gmail.com>
+Received: from Server ([103.60.156.69])
+        by smtp.gmail.com with ESMTPSA id 5a478bee46e88-3515b02d552sm6981287eec.28.2026.10.06.22.19.31
+        for <feleta7185@aminavin.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Tue, 06 Oct 2026 22:19:31 -0700 (PDT)
+Message-ID: <6ac5d663.7d74b517.10c7f6.84c6@mx.google.com>
+Date: Tue, 06 Oct 2026 22:19:31 -0700 (PDT)
+X-Google-Original-Date: 7 Oct 2026 10:49:31 +0530
+MIME-Version: 1.0
+From: "Mazagon Dock Shipbuilders Ltd." <netbeans754@gmail.com>
+To: feleta7185@aminavin.com
+Subject: MDL Vigilance - Email Verification OTP
+Content-Type: text/html; charset=us-ascii
+Content-Transfer-Encoding: quoted-printable
+
+=0D=0A                    <html><body style=3D'font-family:Verdan=
+a,Arial,sans-serif;'>=0D=0A                    <p>Dear User,</p>=0D=0A=
+                    <p>Your OTP for <b>Vigilance Complaint Regist=
+ration</b> on MDL Website is:</p>=0D=0A                    <h2 st=
+yle=3D'color:#00008A; letter-spacing:4px;'>803350</h2>=0D=0A     =
+               <p>This OTP is valid for <b>10 minutes</b>.</p>=0D=0A=
+                    <p>If you did not request this, please ignore=
+ this email.</p>=0D=0A                    <br/>=0D=0A            =
+        <p>Regards,<br/>MDL Vigilance Team</p>=0D=0A             =
+       </body></html>
+

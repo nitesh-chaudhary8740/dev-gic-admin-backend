@@ -1,12 +1,21 @@
+
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 
-const TEMP_DIR = path.resolve(process.cwd(), "storage", "temp", "media");
+const TEMP_DIR = path.resolve(
+  process.cwd(),
+  "storage",
+  "temp",
+  "media"
+);
 
-// Ensure temporary directory exists
 fs.mkdirSync(TEMP_DIR, { recursive: true });
+
+// =====================================================
+// STORAGE
+// =====================================================
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -14,41 +23,123 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+
     const uniqueName =
-      `${Date.now()}-${crypto.randomUUID()}` +
-      path.extname(file.originalname).toLowerCase();
+      `${Date.now()}-${crypto.randomUUID()}${extension}`;
 
     cb(null, uniqueName);
   }
 });
 
-// 1. Existing Single Upload
-const upload = multer({
+// =====================================================
+// MULTER CONFIGURATION
+// =====================================================
+
+const singleUpload = multer({
   storage,
+
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB
+    fileSize: 50 * 1024 * 1024,
     files: 1
-  },
-  fileFilter: (req, file, cb) => {
-    const extension = path.extname(file.originalname).replace(".", "").toLowerCase();
-    if (!extension) return cb(new Error("File extension is required."));
-    cb(null, true);
   }
 });
 
-// 2. Bulk Upload Configuration (Max 100 files)
-const bulkUpload = multer({
+const bulkUploadObj = multer({
   storage,
+
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB per file
+    fileSize: 50 * 1024 * 1024,
     files: 100
-  },
-  fileFilter: (req, file, cb) => {
-    const extension = path.extname(file.originalname).replace(".", "").toLowerCase();
-    if (!extension) return cb(new Error("File extension is required."));
-    cb(null, true);
   }
 });
 
-// Export both
-module.exports = { upload, bulkUpload };
+// =====================================================
+// TEMP FILE CLEANUP
+// =====================================================
+
+const cleanupTempFiles = async (files = []) => {
+  await Promise.all(
+    files.map((file) => {
+      if (!file?.path) return Promise.resolve();
+
+      return fs.promises.unlink(file.path).catch(() => {});
+    })
+  );
+};
+
+// =====================================================
+// BULK UPLOAD ERROR HANDLER
+// =====================================================
+
+const bulkUpload = {
+  array: (fieldName, maxCount) => {
+    const multerMiddleware = bulkUploadObj.array(
+      fieldName,
+      maxCount
+    );
+
+    return (req, res, next) => {
+      multerMiddleware(req, res, async (err) => {
+        if (!err) {
+          return next();
+        }
+
+        // Clean files already written to temporary storage.
+        await cleanupTempFiles(req.files || []);
+
+        if (err instanceof multer.MulterError) {
+          let statusCode = 400;
+          let message = "File upload error.";
+
+          switch (err.code) {
+            case "LIMIT_FILE_SIZE":
+              statusCode = 413;
+              message =
+                "File size exceeds the allowed limit of 50 MB.";
+              break;
+
+            case "LIMIT_FILE_COUNT":
+              statusCode = 400;
+              message =
+                "You can upload a maximum of 100 files at a time.";
+              break;
+
+            case "LIMIT_UNEXPECTED_FILE":
+              statusCode = 400;
+              message = "Unexpected file field.";
+              break;
+
+            case "LIMIT_FIELD_COUNT":
+              statusCode = 400;
+              message = "Too many form fields.";
+              break;
+
+            default:
+              statusCode = 400;
+          }
+
+          return res.status(statusCode).json({
+            success: false,
+            message,
+            code: err.code
+          });
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: err.message || "Failed to process upload."
+        });
+      });
+    };
+  }
+};
+
+// =====================================================
+// EXPORTS
+// =====================================================
+
+module.exports = {
+  upload: singleUpload,
+  bulkUpload
+};
